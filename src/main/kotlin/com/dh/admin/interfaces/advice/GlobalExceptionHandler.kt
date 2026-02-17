@@ -1,53 +1,60 @@
 package com.dh.admin.interfaces.advice
 
 import com.dh.admin.common.exception.*
-import com.dh.admin.common.response.ErrorResponse
-import org.springframework.http.HttpStatus
+import jakarta.servlet.http.HttpServletRequest
+import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
 import org.springframework.validation.FieldError
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import java.net.URI
+import java.time.OffsetDateTime
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
 
-    @ExceptionHandler(ResourceNotFoundException::class)
-    fun handleNotFound(e: ResourceNotFoundException): ResponseEntity<ErrorResponse> =
-        buildErrorResponse(HttpStatus.NOT_FOUND, e)
-
-    @ExceptionHandler(ValidationException::class)
-    fun handleValidation(e: ValidationException): ResponseEntity<ErrorResponse> =
-        buildErrorResponse(HttpStatus.BAD_REQUEST, e)
-
-    @ExceptionHandler(UnauthorizedException::class)
-    fun handleUnauthorized(e: UnauthorizedException): ResponseEntity<ErrorResponse> =
-        buildErrorResponse(HttpStatus.UNAUTHORIZED, e)
-
-    @ExceptionHandler(ForbiddenException::class)
-    fun handleForbidden(e: ForbiddenException): ResponseEntity<ErrorResponse> =
-        buildErrorResponse(HttpStatus.FORBIDDEN, e)
-
-    @ExceptionHandler(DuplicateException::class)
-    fun handleDuplicate(e: DuplicateException): ResponseEntity<ErrorResponse> =
-        buildErrorResponse(HttpStatus.CONFLICT, e)
+    @ExceptionHandler(BusinessException::class)
+    fun handleBusinessException(
+        e: BusinessException,
+        request: HttpServletRequest
+    ): ResponseEntity<ProblemDetail> =
+        buildProblemDetail(e.errorCode, e.message, request.requestURI)
 
     @ExceptionHandler(MethodArgumentNotValidException::class)
-    fun handleMethodArgumentNotValid(e: MethodArgumentNotValidException): ResponseEntity<ErrorResponse> {
+    fun handleMethodArgumentNotValid(
+        e: MethodArgumentNotValidException,
+        request: HttpServletRequest
+    ): ResponseEntity<ProblemDetail> {
         val message = e.bindingResult
             .fieldErrors
             .joinToString(", ") { formatFieldError(it) }
             .ifBlank { "요청값이 올바르지 않습니다." }
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-            ErrorResponse(errorCode = "VALIDATION_ERROR", message = message)
-        )
+        return buildProblemDetail(ErrorCode.VALIDATION_ERROR, message, request.requestURI)
     }
 
-    private fun buildErrorResponse(status: HttpStatus, e: BusinessException): ResponseEntity<ErrorResponse> =
-        ResponseEntity.status(status).body(
-            ErrorResponse(errorCode = e.errorCode, message = e.message)
-        )
+    @ExceptionHandler(Exception::class)
+    fun handleUnexpectedException(
+        e: Exception,
+        request: HttpServletRequest
+    ): ResponseEntity<ProblemDetail> =
+        buildProblemDetail(ErrorCode.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.", request.requestURI)
+
+    private fun buildProblemDetail(
+        errorCode: ErrorCode,
+        detail: String,
+        instancePath: String
+    ): ResponseEntity<ProblemDetail> {
+        val problemDetail = ProblemDetail.forStatusAndDetail(errorCode.status, detail).apply {
+            title = errorCode.title
+            type = URI.create("https://api.dh-admin.dev/problems/${errorCode.code}")
+            instance = URI.create(instancePath)
+            setProperty("errorCode", errorCode.code)
+            setProperty("timestamp", OffsetDateTime.now().toString())
+        }
+        return ResponseEntity.status(errorCode.status).body(problemDetail)
+    }
 
     private fun formatFieldError(fieldError: FieldError): String =
         "${fieldError.field}: ${fieldError.defaultMessage ?: "유효하지 않은 값입니다."}"

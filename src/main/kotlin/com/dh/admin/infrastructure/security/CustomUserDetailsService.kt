@@ -12,7 +12,7 @@ class CustomUserDetailsService(
 ) : UserDetailsService {
 
     override fun loadUserByUsername(email: String): UserDetails {
-        val adminUser = adminUserRepository.findByEmail(email)
+        val adminUser = adminUserRepository.findByEmailWithRolesAndPermissions(email)
             ?: throw UsernameNotFoundException("사용자를 찾을 수 없습니다: $email")
         return CustomUserDetails(adminUser)
     }

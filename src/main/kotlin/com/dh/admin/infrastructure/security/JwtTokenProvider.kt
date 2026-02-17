@@ -20,24 +20,21 @@ class JwtTokenProvider(
         Keys.hmacShaKeyFor(secret.toByteArray())
     }
 
-    fun generateAccessToken(userId: Long, email: String, role: String): String {
-        return generateToken(userId, email, role, accessTokenExpiration)
-    }
+    fun generateAccessToken(userId: Long, email: String, roles: List<String>): String =
+        generateToken(userId, email, roles, accessTokenExpiration)
 
-    fun generateRefreshToken(userId: Long, email: String, role: String): String {
-        return generateToken(userId, email, role, refreshTokenExpiration)
-    }
+    fun generateRefreshToken(userId: Long, email: String, roles: List<String>): String =
+        generateToken(userId, email, roles, refreshTokenExpiration)
 
     fun getRefreshTokenExpiration(): Long = refreshTokenExpiration
 
-    fun getUserId(token: String): Long =
-        parseClaims(token).subject.toLong()
+    fun getUserId(token: String): Long = parseClaims(token).subject.toLong()
 
-    fun getEmail(token: String): String =
-        parseClaims(token)["email"] as String
+    fun getEmail(token: String): String = parseClaims(token)["email"] as String
 
-    fun getRole(token: String): String =
-        parseClaims(token)["role"] as String
+    @Suppress("UNCHECKED_CAST")
+    fun getRoles(token: String): List<String> =
+        parseClaims(token)["roles"] as? List<String> ?: emptyList()
 
     fun validateToken(token: String): Boolean {
         return try {
@@ -56,14 +53,14 @@ class JwtTokenProvider(
         }
     }
 
-    private fun generateToken(userId: Long, email: String, role: String, expiration: Long): String {
+    private fun generateToken(userId: Long, email: String, roles: List<String>, expiration: Long): String {
         val now = Date()
         val expiryDate = Date(now.time + expiration)
 
         return Jwts.builder()
             .subject(userId.toString())
             .claim("email", email)
-            .claim("role", role)
+            .claim("roles", roles)
             .issuedAt(now)
             .expiration(expiryDate)
             .signWith(key)

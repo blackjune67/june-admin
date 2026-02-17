@@ -12,10 +12,32 @@ class CustomUserDetails(
     val id: Long get() = adminUser.id
     val email: String get() = adminUser.email
     val name: String get() = adminUser.name
-    val role: String get() = adminUser.role.name
 
-    override fun getAuthorities(): Collection<GrantedAuthority> =
-        listOf(SimpleGrantedAuthority("ROLE_${adminUser.role.name}"))
+    val roleCodes: List<String>
+        get() = adminUser.roles.map { it.code }
+
+    val permissionAuthorities: Set<String>
+        get() = adminUser.roles.flatMap { role ->
+            role.permissions.map { it.authority }
+        }.toSet()
+
+    override fun getAuthorities(): Collection<GrantedAuthority> {
+        val authorities = mutableListOf<GrantedAuthority>()
+
+        // 역할 기반 ROLE_ 권한
+        adminUser.roles.forEach { role ->
+            authorities.add(SimpleGrantedAuthority("ROLE_${role.code}"))
+        }
+
+        // resource:action 기반 권한
+        adminUser.roles.forEach { role ->
+            role.permissions.forEach { permission ->
+                authorities.add(SimpleGrantedAuthority(permission.authority))
+            }
+        }
+
+        return authorities
+    }
 
     override fun getPassword(): String = adminUser.password
 

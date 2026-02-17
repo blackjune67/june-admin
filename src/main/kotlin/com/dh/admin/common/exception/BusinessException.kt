@@ -1,21 +1,21 @@
 package com.dh.admin.common.exception
 
 sealed class BusinessException(
-    val errorCode: String,
+    val errorCode: ErrorCode,
     override val message: String
 ) : RuntimeException(message)
 
 class ResourceNotFoundException(message: String) :
-    BusinessException("NOT_FOUND", message)
+    BusinessException(ErrorCode.NOT_FOUND, message)
 
 class ValidationException(message: String) :
-    BusinessException("VALIDATION_ERROR", message)
+    BusinessException(ErrorCode.VALIDATION_ERROR, message)
 
 class UnauthorizedException(message: String) :
-    BusinessException("UNAUTHORIZED", message)
+    BusinessException(ErrorCode.UNAUTHORIZED, message)
 
 class ForbiddenException(message: String) :
-    BusinessException("FORBIDDEN", message)
+    BusinessException(ErrorCode.FORBIDDEN, message)
 
 class DuplicateException(message: String) :
-    BusinessException("DUPLICATE", message)
+    BusinessException(ErrorCode.DUPLICATE, message)

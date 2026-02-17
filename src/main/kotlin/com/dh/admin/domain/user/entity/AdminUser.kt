@@ -1,6 +1,7 @@
 package com.dh.admin.domain.user.entity
 
 import com.dh.admin.common.entity.BaseEntity
+import com.dh.admin.domain.role.entity.Role
 import jakarta.persistence.*
 import java.time.LocalDateTime
 
@@ -16,9 +17,18 @@ class AdminUser(
     @Column(nullable = false)
     val name: String,
 
+    @Deprecated("동적 RBAC으로 전환됨. roles 필드를 사용하세요.")
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    val role: AdminRole = AdminRole.VIEWER,
+    @Column(nullable = true)
+    var role: AdminRole? = null,
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "admin_user_roles",
+        joinColumns = [JoinColumn(name = "admin_user_id")],
+        inverseJoinColumns = [JoinColumn(name = "role_id")]
+    )
+    val roles: MutableSet<Role> = mutableSetOf(),
 
     @Column(nullable = false)
     val isActive: Boolean = true,

@@ -1,14 +1,13 @@
 package com.dh.admin.domain.auth.service
 
-import com.dh.admin.application.dto.AdminUserResponse
-import com.dh.admin.application.dto.LoginRequest
-import com.dh.admin.application.dto.SignUpRequest
-import com.dh.admin.application.dto.TokenResponse
+import com.dh.admin.application.dto.*
 import com.dh.admin.common.exception.DuplicateException
 import com.dh.admin.common.exception.UnauthorizedException
 import com.dh.admin.common.exception.ValidationException
 import com.dh.admin.domain.auth.entity.RefreshToken
+import com.dh.admin.domain.auth.exception.AuthExceptionMessages
 import com.dh.admin.domain.auth.repository.RefreshTokenRepository
+import com.dh.admin.domain.menu.service.MenuService
 import com.dh.admin.domain.user.entity.AdminUser
 import com.dh.admin.domain.user.repository.AdminUserRepository
 import com.dh.admin.infrastructure.security.JwtTokenProvider
@@ -23,13 +22,14 @@ class AuthService(
     private val adminUserRepository: AdminUserRepository,
     private val refreshTokenRepository: RefreshTokenRepository,
     private val jwtTokenProvider: JwtTokenProvider,
-    private val passwordEncoder: PasswordEncoder
+    private val passwordEncoder: PasswordEncoder,
+    private val menuService: MenuService
 ) {
 
     @Transactional
     fun signUp(request: SignUpRequest): AdminUserResponse {
         if (adminUserRepository.existsByEmail(request.email)) {
-            throw DuplicateException("이미 사용 중인 이메일입니다.")
+            throw DuplicateException(AuthExceptionMessages.EMAIL_ALREADY_IN_USE)
         }
 
         val user = adminUserRepository.save(
@@ -44,22 +44,22 @@ class AuthService(
             id = user.id,
             email = user.email,
             name = user.name,
-            role = user.role,
+            roles = user.roles.map { RoleSummary(it.id, it.code, it.name) },
             isActive = user.isActive
         )
     }
 
     @Transactional
     fun login(request: LoginRequest): TokenResponse {
-        val user = adminUserRepository.findByEmail(request.email)
-            ?: throw UnauthorizedException("이메일 또는 비밀번호가 올바르지 않습니다.")
+        val user = adminUserRepository.findByEmailWithRolesAndPermissions(request.email)
+            ?: throw UnauthorizedException(AuthExceptionMessages.INVALID_CREDENTIALS)
 
         validateUserState(user)
 
         if (!passwordEncoder.matches(request.password, user.password)) {
             user.increaseLoginFailCount()
             adminUserRepository.save(user)
-            throw UnauthorizedException("이메일 또는 비밀번호가 올바르지 않습니다.")
+            throw UnauthorizedException(AuthExceptionMessages.INVALID_CREDENTIALS)
         }
 
         user.resetLoginFailCount()
@@ -71,17 +71,16 @@ class AuthService(
     @Transactional
     fun refresh(refreshTokenValue: String): TokenResponse {
         val storedToken = refreshTokenRepository.findByToken(refreshTokenValue)
-            ?: throw UnauthorizedException("유효하지 않은 Refresh Token입니다.")
+            ?: throw UnauthorizedException(AuthExceptionMessages.INVALID_REFRESH_TOKEN)
 
         if (storedToken.isExpired) {
             refreshTokenRepository.delete(storedToken)
-            throw UnauthorizedException("만료된 Refresh Token입니다. 다시 로그인해주세요.")
+            throw UnauthorizedException(AuthExceptionMessages.EXPIRED_REFRESH_TOKEN)
         }
 
-        val user = adminUserRepository.findById(storedToken.adminUserId)
-            .orElseThrow { UnauthorizedException("사용자를 찾을 수 없습니다.") }
+        val user = adminUserRepository.findByIdWithRolesAndPermissions(storedToken.adminUserId)
+            ?: throw UnauthorizedException(AuthExceptionMessages.USER_NOT_FOUND)
 
-        // 기존 refresh token 삭제 후 새로 발급
         refreshTokenRepository.delete(storedToken)
         return issueTokens(user)
     }
@@ -91,33 +90,42 @@ class AuthService(
         refreshTokenRepository.deleteByAdminUserId(userId)
     }
 
-    fun getMyInfo(userId: Long): AdminUserResponse {
-        val user = adminUserRepository.findById(userId)
-            .orElseThrow { UnauthorizedException("사용자를 찾을 수 없습니다.") }
+    fun getMyInfo(userId: Long): MyInfoResponse {
+        val user = adminUserRepository.findByIdWithRolesAndPermissions(userId)
+            ?: throw UnauthorizedException(AuthExceptionMessages.USER_NOT_FOUND)
 
-        return AdminUserResponse(
+        val roles = user.roles.map { RoleSummary(it.id, it.code, it.name) }
+
+        val permissions = user.roles.flatMap { role ->
+            role.permissions.map { it.authority }
+        }.distinct().sorted()
+
+        val menus = menuService.findAccessibleMenus(permissions.toSet())
+
+        return MyInfoResponse(
             id = user.id,
             email = user.email,
             name = user.name,
-            role = user.role,
-            isActive = user.isActive
+            roles = roles,
+            permissions = permissions,
+            menus = menus
         )
     }
 
     private fun validateUserState(user: AdminUser) {
         if (!user.isActive) {
-            throw ValidationException("비활성화된 계정입니다.")
+            throw ValidationException(AuthExceptionMessages.INACTIVE_ACCOUNT)
         }
         if (user.isLocked) {
-            throw ValidationException("계정이 잠겨있습니다. 관리자에게 문의하세요.")
+            throw ValidationException(AuthExceptionMessages.LOCKED_ACCOUNT)
         }
     }
 
     private fun issueTokens(user: AdminUser): TokenResponse {
-        val accessToken = jwtTokenProvider.generateAccessToken(user.id, user.email, user.role.name)
-        val refreshToken = jwtTokenProvider.generateRefreshToken(user.id, user.email, user.role.name)
+        val roleCodes = user.roles.map { it.code }
+        val accessToken = jwtTokenProvider.generateAccessToken(user.id, user.email, roleCodes)
+        val refreshToken = jwtTokenProvider.generateRefreshToken(user.id, user.email, roleCodes)
 
-        // 기존 refresh token 삭제 후 저장
         refreshTokenRepository.deleteByAdminUserId(user.id)
         refreshTokenRepository.save(
             RefreshToken(

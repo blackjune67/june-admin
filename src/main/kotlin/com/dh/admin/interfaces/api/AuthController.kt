@@ -43,7 +43,7 @@ class AuthController(
 
     @GetMapping("/me")
     fun me(@AuthenticationPrincipal userDetails: CustomUserDetails): ResponseEntity<ApiResponse<*>> {
-        val userInfo = authService.getMyInfo(userDetails.id)
-        return ResponseEntity.ok(ApiResponse.ok(userInfo))
+        val myInfo = authService.getMyInfo(userDetails.id)
+        return ResponseEntity.ok(ApiResponse.ok(myInfo))
     }
 }

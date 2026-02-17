@@ -1,6 +1,5 @@
 package com.dh.admin.application.dto
 
-import com.dh.admin.domain.user.entity.AdminRole
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
@@ -42,6 +41,15 @@ data class AdminUserResponse(
     val id: Long,
     val email: String,
     val name: String,
-    val role: AdminRole,
+    val roles: List<RoleSummary>,
     val isActive: Boolean
+)
+
+data class MyInfoResponse(
+    val id: Long,
+    val email: String,
+    val name: String,
+    val roles: List<RoleSummary>,
+    val permissions: List<String>,
+    val menus: List<MenuResponse>
 )
