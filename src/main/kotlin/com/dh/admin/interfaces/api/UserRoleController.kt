@@ -3,6 +3,7 @@ package com.dh.admin.interfaces.api
 import com.dh.admin.application.dto.AssignRolesRequest
 import com.dh.admin.common.response.ApiResponse
 import com.dh.admin.domain.role.service.RoleService
+import com.dh.admin.domain.user.service.UserQueryService
 import org.springframework.http.ResponseEntity
 import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
@@ -10,8 +11,22 @@ import org.springframework.web.bind.annotation.*
 @RestController
 @RequestMapping("/api/v1/users")
 class UserRoleController(
-    private val roleService: RoleService
+    private val roleService: RoleService,
+    private val userQueryService: UserQueryService
 ) {
+
+    @GetMapping
+    @PreAuthorize("hasAuthority('user:read')")
+    fun findUsers(
+        @RequestParam(required = false) keyword: String?,
+        @RequestParam(required = false) roleCode: String?,
+        @RequestParam(required = false) isActive: Boolean?,
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int
+    ): ResponseEntity<ApiResponse<*>> {
+        val users = userQueryService.findUsers(keyword, roleCode, isActive, page, size)
+        return ResponseEntity.ok(ApiResponse.ok(users))
+    }
 
     @GetMapping("/{id}/roles")
     @PreAuthorize("hasAuthority('user:read')")
